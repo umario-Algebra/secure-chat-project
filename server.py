@@ -44,7 +44,7 @@ async def handler(websocket):
 
             if data.get("type") == "chat":
                 recipient = data.get("to")
-                message_text = data.get("message")
+                payload = data.get("payload")
 
                 if recipient not in connected_users:
                     await websocket.send(json.dumps({
@@ -56,7 +56,7 @@ async def handler(websocket):
                 await connected_users[recipient].send(json.dumps({
                     "type": "chat",
                     "from": username,
-                    "message": message_text
+                    "payload": payload
                 }))
 
     except websockets.exceptions.ConnectionClosed:

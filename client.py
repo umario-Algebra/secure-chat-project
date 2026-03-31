@@ -35,7 +35,7 @@ async def main():
             chat_message = {
                 "type": "chat",
                 "to": "ana",
-                "message": "Hello Ana, this is Mario"
+                "payload": "Hello Ana, this is Mario"
             }
 
             await websocket.send(json.dumps(chat_message))
