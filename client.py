@@ -3,6 +3,15 @@ import json
 import sys
 import websockets
 
+from crypto_utils import encrypt_message, decrypt_message
+
+
+# Temporary shared demo key for both clients
+DEMO_KEY = bytes.fromhex(
+    "00112233445566778899aabbccddeeff"
+    "00112233445566778899aabbccddeeff"
+)
+
 
 async def main():
     uri = "ws://localhost:8765"
@@ -32,21 +41,34 @@ async def main():
         if username == "mario":
             await asyncio.sleep(2)
 
+            encrypted_payload = encrypt_message(DEMO_KEY, "Hello Ana, this is Mario")
+
             chat_message = {
                 "type": "chat",
                 "to": "ana",
-                "payload": "Hello Ana, this is Mario"
+                "payload": encrypted_payload
             }
 
             await websocket.send(json.dumps(chat_message))
-            print("Chat message sent to ana")
+            print("Encrypted chat message sent to ana")
 
         print(f"{username} is waiting for messages for 20 seconds...")
 
         try:
             while True:
-                incoming = await asyncio.wait_for(websocket.recv(), timeout=20)
-                print(f"{username} received: {incoming}")
+                incoming_raw = await asyncio.wait_for(websocket.recv(), timeout=20)
+                print(f"{username} received raw: {incoming_raw}")
+
+                incoming = json.loads(incoming_raw)
+
+                if incoming.get("type") == "chat":
+                    payload = incoming.get("payload", {})
+                    plaintext = decrypt_message(
+                        DEMO_KEY,
+                        payload["nonce"],
+                        payload["ciphertext"]
+                    )
+                    print(f"{username} decrypted message: {plaintext}")
         except asyncio.TimeoutError:
             print(f"{username} timed out waiting for messages")
 
