@@ -17,12 +17,15 @@ async def main():
     uri = "ws://localhost:8765"
 
     if len(sys.argv) < 4:
-        print("Usage: python client.py <register|login> <username> <password>")
+        print("Usage: python client.py <register|login> <username> <password> [recipient] [message]")
         return
 
     action = sys.argv[1]
     username = sys.argv[2]
     password = sys.argv[3]
+
+    recipient = sys.argv[4] if len(sys.argv) >= 5 else None
+    message_text = sys.argv[5] if len(sys.argv) >= 6 else None
 
     last_seen_counters = {}
 
@@ -62,16 +65,16 @@ async def main():
         reply_raw = await websocket.recv()
         print(f"Reply from server: {reply_raw}")
 
-        if username == "mario":
+        if recipient and message_text:
             await asyncio.sleep(2)
 
             get_key_message = {
                 "type": "get_public_key",
-                "username": "ana"
+                "username": recipient
             }
 
             await websocket.send(json.dumps(get_key_message))
-            print("Requested public key for ana")
+            print(f"Requested public key for {recipient}")
 
             reply_raw = await websocket.recv()
             print(f"Reply from server: {reply_raw}")
@@ -79,20 +82,17 @@ async def main():
             reply = json.loads(reply_raw)
 
             if reply.get("type") == "public_key_result":
-                ana_public_key_b64 = reply["key"]
-                ana_public_key = public_key_from_base64(ana_public_key_b64)
-                shared_key = derive_shared_key(private_key, ana_public_key)
+                recipient_public_key_b64 = reply["key"]
+                recipient_public_key = public_key_from_base64(recipient_public_key_b64)
+                shared_key = derive_shared_key(private_key, recipient_public_key)
 
                 print(f"Derived shared key length: {len(shared_key)}")
 
-                encrypted_payload = encrypt_message(
-                    shared_key,
-                    "Hello Ana, authenticated and encrypted message"
-                )
+                encrypted_payload = encrypt_message(shared_key, message_text)
 
                 chat_message = {
                     "type": "chat",
-                    "to": "ana",
+                    "to": recipient,
                     "payload": {
                         "sender_public_key": public_key_b64,
                         "counter": 1,
@@ -102,7 +102,7 @@ async def main():
                 }
 
                 await websocket.send(json.dumps(chat_message))
-                print("Encrypted chat message with counter=1 sent to ana")
+                print(f"Encrypted chat message with counter=1 sent to {recipient}")
 
         print(f"{username} is waiting for messages for 20 seconds...")
 
