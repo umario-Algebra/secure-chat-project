@@ -29,7 +29,11 @@ async def handler(websocket):
             }))
             return
 
-        connected_users[username] = websocket
+        connected_users[username] = {
+            "websocket": websocket,
+            "public_key": None
+        }
+
         print(f"User registered: {username}")
 
         await websocket.send(json.dumps({
@@ -39,10 +43,43 @@ async def handler(websocket):
 
         async for raw_message in websocket:
             print(f"From {username}: {raw_message}")
-
             data = json.loads(raw_message)
 
-            if data.get("type") == "chat":
+            if data.get("type") == "public_key":
+                connected_users[username]["public_key"] = data.get("key")
+                print(f"Stored public key for {username}")
+
+                await websocket.send(json.dumps({
+                    "type": "public_key_ok",
+                    "message": f"Public key stored for {username}"
+                }))
+
+            elif data.get("type") == "get_public_key":
+                target_user = data.get("username")
+
+                if target_user not in connected_users:
+                    await websocket.send(json.dumps({
+                        "type": "error",
+                        "message": f"User {target_user} is not connected"
+                    }))
+                    continue
+
+                target_public_key = connected_users[target_user]["public_key"]
+
+                if not target_public_key:
+                    await websocket.send(json.dumps({
+                        "type": "error",
+                        "message": f"User {target_user} has not uploaded a public key"
+                    }))
+                    continue
+
+                await websocket.send(json.dumps({
+                    "type": "public_key_result",
+                    "username": target_user,
+                    "key": target_public_key
+                }))
+
+            elif data.get("type") == "chat":
                 recipient = data.get("to")
                 payload = data.get("payload")
 
@@ -53,7 +90,7 @@ async def handler(websocket):
                     }))
                     continue
 
-                await connected_users[recipient].send(json.dumps({
+                await connected_users[recipient]["websocket"].send(json.dumps({
                     "type": "chat",
                     "from": username,
                     "payload": payload
@@ -62,7 +99,7 @@ async def handler(websocket):
     except websockets.exceptions.ConnectionClosed:
         print(f"Connection closed: {username}")
     finally:
-        if username and connected_users.get(username) is websocket:
+        if username and username in connected_users:
             del connected_users[username]
             print(f"User removed: {username}")
 
