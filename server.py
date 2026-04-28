@@ -141,9 +141,15 @@ async def handler(websocket):
 
 async def main():
     print("Starting server on ws://localhost:8765")
-    async with websockets.serve(handler, "localhost", 8765):
-        await asyncio.Future()
+    try:
+        async with websockets.serve(handler, "localhost", 8765):
+            await asyncio.Future()
+    except asyncio.CancelledError:
+        pass
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Server stopped")
