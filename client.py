@@ -21,6 +21,7 @@ async def main():
         return
 
     username = sys.argv[1]
+    last_seen_counters = {}
 
     private_key, public_key = generate_x25519_keypair()
     public_key_b64 = public_key_to_base64(public_key)
@@ -75,20 +76,29 @@ async def main():
 
                 print(f"Derived shared key length: {len(shared_key)}")
 
-                encrypted_payload = encrypt_message(shared_key, "Hello Ana, this is Mario using X25519 + AES-GCM")
+                encrypted_payload = encrypt_message(
+                    shared_key,
+                    "Hello Ana, this is Mario using X25519 + AES-GCM"
+                )
 
                 chat_message = {
                     "type": "chat",
                     "to": "ana",
                     "payload": {
                         "sender_public_key": public_key_b64,
+                        "counter": 1,
                         "nonce": encrypted_payload["nonce"],
                         "ciphertext": encrypted_payload["ciphertext"]
                     }
                 }
 
                 await websocket.send(json.dumps(chat_message))
-                print("Encrypted chat message sent to ana")
+                print("First encrypted chat message with counter=1 sent to ana")
+
+                await asyncio.sleep(1)
+
+                await websocket.send(json.dumps(chat_message))
+                print("Replay message with same counter=1 sent to ana")
 
         print(f"{username} is waiting for messages for 20 seconds...")
 
@@ -100,7 +110,21 @@ async def main():
                 incoming = json.loads(incoming_raw)
 
                 if incoming.get("type") == "chat":
+                    sender = incoming.get("from")
                     payload = incoming.get("payload", {})
+
+                    counter = payload["counter"]
+                    last_seen = last_seen_counters.get(sender, 0)
+
+                    if counter <= last_seen:
+                        print(
+                            f"{username} detected replay attack from {sender}: "
+                            f"counter={counter}, last_seen={last_seen}"
+                        )
+                        continue
+
+                    last_seen_counters[sender] = counter
+
                     sender_public_key_b64 = payload["sender_public_key"]
                     sender_public_key = public_key_from_base64(sender_public_key_b64)
 
@@ -111,6 +135,7 @@ async def main():
                         payload["ciphertext"]
                     )
 
+                    print(f"{username} accepted counter {counter} from {sender}")
                     print(f"{username} decrypted message: {plaintext}")
 
         except asyncio.TimeoutError:
