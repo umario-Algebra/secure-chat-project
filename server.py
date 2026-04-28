@@ -2,6 +2,9 @@ import asyncio
 import json
 import websockets
 
+from auth import hash_password, verify_password
+from storage import add_user, get_user
+
 connected_users = {}
 
 
@@ -13,19 +16,53 @@ async def handler(websocket):
         raw_message = await websocket.recv()
         data = json.loads(raw_message)
 
-        if data.get("type") != "register" or "username" not in data:
+        msg_type = data.get("type")
+        username = data.get("username")
+        password = data.get("password")
+
+        if msg_type not in ("register", "login") or not username or not password:
             await websocket.send(json.dumps({
                 "type": "error",
-                "message": "First message must be a register message"
+                "message": "First message must be register/login with username and password"
             }))
             return
 
-        username = data["username"]
+        if msg_type == "register":
+            try:
+                password_hash = hash_password(password)
+                add_user(username, password_hash)
+            except ValueError as e:
+                await websocket.send(json.dumps({
+                    "type": "error",
+                    "message": str(e)
+                }))
+                return
+
+            print(f"User registered: {username}")
+
+        elif msg_type == "login":
+            user = get_user(username)
+
+            if not user:
+                await websocket.send(json.dumps({
+                    "type": "error",
+                    "message": "User does not exist"
+                }))
+                return
+
+            if not verify_password(password, user["password_hash"]):
+                await websocket.send(json.dumps({
+                    "type": "error",
+                    "message": "Invalid password"
+                }))
+                return
+
+            print(f"User logged in: {username}")
 
         if username in connected_users:
             await websocket.send(json.dumps({
                 "type": "error",
-                "message": "Username already connected"
+                "message": "User already connected"
             }))
             return
 
@@ -34,10 +71,8 @@ async def handler(websocket):
             "public_key": None
         }
 
-        print(f"User registered: {username}")
-
         await websocket.send(json.dumps({
-            "type": "register_ok",
+            "type": f"{msg_type}_ok",
             "message": f"Welcome, {username}"
         }))
 
